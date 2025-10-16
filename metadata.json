@@ -1,0 +1,5 @@
+{
+  "name": "Image Converter by Chiara Berti 13",
+  "description": "A powerful, client-side image conversion tool created by Chiara Berti 13. Built with React and Tailwind CSS. Convert images to various formats like JPG, PNG, WEBP, and GIF directly in your browser with batch processing capabilities. Your files are processed locally for maximum privacy and speed.",
+  "requestFramePermissions": []
+}
