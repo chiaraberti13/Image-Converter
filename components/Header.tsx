@@ -8,13 +8,16 @@ const LogoIcon = () => (
     </svg>
 );
 
+interface HeaderProps {
+    onLogoClick: () => void;
+}
 
-export const Header: React.FC = () => {
+export const Header: React.FC<HeaderProps> = ({ onLogoClick }) => {
   return (
     <header className="w-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm sticky top-0 z-50 border-b border-slate-200 dark:border-slate-700">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center space-x-2">
+          <div onClick={onLogoClick} className="flex items-center space-x-2 cursor-pointer">
             <LogoIcon />
             <span className="text-xl font-bold text-slate-500 dark:text-slate-400">Image Converter</span>
           </div>

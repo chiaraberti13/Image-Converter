@@ -43,6 +43,8 @@ const RemoveIcon: React.FC = () => (
 
 export const FileListItem: React.FC<FileListItemProps> = ({ file, onFormatChange, onRemove }) => {
   const isActionable = file.status === FileStatus.WAITING || file.status === FileStatus.ERROR;
+  const isHeicInput = file.originalFile.name.toLowerCase().endsWith('.heic') || file.originalFile.name.toLowerCase().endsWith('.heif');
+  const isHeicOutput = file.targetFormat === 'HEIC' || file.targetFormat === 'HEIF';
 
   return (
     <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row items-start md:items-center gap-4 transition-all">
@@ -62,22 +64,34 @@ export const FileListItem: React.FC<FileListItemProps> = ({ file, onFormatChange
         <div className="mt-2.5">
             <p className={`text-xs font-semibold uppercase tracking-wider ${getStatusColor(file.status)}`}>{file.status}</p>
             <ProgressBar progress={file.progress} status={file.status} />
+            {isHeicInput && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                Note: HEIC/HEIF files are first converted to PNG internally.
+              </p>
+            )}
         </div>
       </div>
 
       <div className="flex items-center gap-4 w-full md:w-auto flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-slate-500 dark:text-slate-400">To:</span>
-          <select
-            value={file.targetFormat}
-            onChange={(e) => onFormatChange(file.id, e.target.value as SupportedFormat)}
-            disabled={!isActionable}
-            className="text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md py-1.5 px-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {SUPPORTED_FORMATS.map(format => (
-              <option key={format} value={format}>{format}</option>
-            ))}
-          </select>
+        <div className="flex flex-col items-start md:items-end">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">To:</span>
+            <select
+              value={file.targetFormat}
+              onChange={(e) => onFormatChange(file.id, e.target.value as SupportedFormat)}
+              disabled={!isActionable}
+              className="text-sm font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md py-1.5 px-2 focus:ring-2 focus:ring-brand-primary focus:border-brand-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {SUPPORTED_FORMATS.map(format => (
+                <option key={format} value={format}>{format}</option>
+              ))}
+            </select>
+          </div>
+          {isHeicOutput && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Note: Output will be a high-quality PNG file.
+            </p>
+          )}
         </div>
 
         {file.status === FileStatus.DONE && file.convertedUrl && (

@@ -1,4 +1,3 @@
-
 import heic2any from 'heic2any';
 import UTIF from 'utif';
 import { type SupportedFormat, type ResizeOptions, type CropOptions, type AspectRatio } from '../types';
@@ -18,71 +17,35 @@ export const convertImage = (
 ): Promise<{ url: string; size: number }> => {
   return new Promise(async (resolve, reject) => {
     try {
-      let blobToProcess: Blob = file;
-      const fileName = file.name.toLowerCase();
-      const fileType = file.type.toLowerCase();
-
-      // Handle special formats by converting them to a processable format first
-      if (fileName.endsWith('.heic') || fileName.endsWith('.heif') || fileType.includes('heic') || fileType.includes('heif')) {
-        onProgress(10);
-        const convertedBlob = await heic2any({ blob: file, toType: "image/png" });
-        blobToProcess = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-        onProgress(20);
-      } else if (fileName.endsWith('.tiff') || fileName.endsWith('.tif') || fileType.includes('tiff')) {
-        onProgress(10);
-        const arrayBuffer = await file.arrayBuffer();
-        const ifds = UTIF.decode(arrayBuffer);
-        const firstPage = ifds[0];
-        UTIF.decodeImage(arrayBuffer, firstPage);
-        const rgba = UTIF.toRGBA8(firstPage);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = firstPage.width;
-        canvas.height = firstPage.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          return reject(new Error('Could not get canvas context for TIFF decoding'));
-        }
-        const imageData = new ImageData(new Uint8ClampedArray(rgba), firstPage.width, firstPage.height);
-        ctx.putImageData(imageData, 0, 0);
-        
-        const convertedBlob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-        if (!convertedBlob) {
-          return reject(new Error('Failed to convert TIFF canvas to blob'));
-        }
-        blobToProcess = convertedBlob;
-        onProgress(20);
-      }
-      
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        onProgress(25);
-        const img = new Image();
-        img.onload = () => {
+      // CORREZIONE 1: Logica di processamento unificata per gestire sorgenti multiple (Image or Canvas).
+      // Questa funzione contiene la logica principale per il ridimensionamento, il ritaglio e l'esportazione.
+      const processSource = (source: HTMLImageElement | HTMLCanvasElement) => {
           onProgress(50);
           const canvas = document.createElement('canvas');
           
+          const sourceNaturalWidth = 'naturalWidth' in source ? source.naturalWidth : source.width;
+          const sourceNaturalHeight = 'naturalHeight' in source ? source.naturalHeight : source.height;
+
           let sourceX = 0;
           let sourceY = 0;
-          let sourceWidth = img.width;
-          let sourceHeight = img.height;
+          let sourceWidth = sourceNaturalWidth;
+          let sourceHeight = sourceNaturalHeight;
 
-          // 1. Apply Crop
+          // 1. Applica il ritaglio (Crop)
           if (cropOptions && cropOptions.enabled && cropOptions.aspectRatio) {
               const targetAspectRatio = parseAspectRatio(cropOptions.aspectRatio);
-              const imageAspectRatio = img.width / img.height;
+              const imageAspectRatio = sourceWidth / sourceHeight;
 
-              if (imageAspectRatio > targetAspectRatio) { // Image is wider than target, crop sides
-                  sourceWidth = img.height * targetAspectRatio;
-                  sourceX = (img.width - sourceWidth) / 2;
-              } else if (imageAspectRatio < targetAspectRatio) { // Image is taller than target, crop top/bottom
-                  sourceHeight = img.width / targetAspectRatio;
-                  sourceY = (img.height - sourceHeight) / 2;
+              if (imageAspectRatio > targetAspectRatio) {
+                  sourceWidth = sourceHeight * targetAspectRatio;
+                  sourceX = (sourceNaturalWidth - sourceWidth) / 2;
+              } else if (imageAspectRatio < targetAspectRatio) {
+                  sourceHeight = sourceWidth / targetAspectRatio;
+                  sourceY = (sourceNaturalHeight - sourceHeight) / 2;
               }
           }
 
-          // 2. Apply Resize (based on cropped dimensions)
+          // 2. Applica il ridimensionamento (Resize), basandosi sulle dimensioni dopo il ritaglio
           let newWidth = sourceWidth;
           let newHeight = sourceHeight;
 
@@ -111,20 +74,17 @@ export const convertImage = (
             return reject(new Error('Could not get canvas context'));
           }
           
-          // For formats that don't support transparency, fill with white
           if (targetFormat === 'JPG' || targetFormat === 'BMP') {
               ctx.fillStyle = '#FFFFFF';
               ctx.fillRect(0, 0, canvas.width, canvas.height);
           }
 
-          ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
           onProgress(75);
 
           if (targetFormat === 'TIFF') {
             try {
               const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              // FIX: Use UTIF.encodeImage instead of UTIF.encode, as encode expects 1 argument but was given 3.
-              // encodeImage correctly takes the image data buffer, width, and height.
               const tiffBuffer = UTIF.encodeImage(imageData.data, canvas.width, canvas.height);
               const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
               const url = URL.createObjectURL(blob);
@@ -135,35 +95,77 @@ export const convertImage = (
             }
             return;
           }
-
-          let mimeType = `image/${targetFormat.toLowerCase()}`;
-          if (targetFormat === 'JPG') {
-              mimeType = 'image/jpeg';
+          
+          let conversionFormat = targetFormat;
+          if (targetFormat === 'HEIC' || targetFormat === 'HEIF') {
+            conversionFormat = 'PNG';
           }
+
+          let mimeType = `image/${conversionFormat.toLowerCase()}`;
+          if (conversionFormat === 'JPG') mimeType = 'image/jpeg';
           
           canvas.toBlob(
             (blob) => {
-              if (!blob) {
-                return reject(new Error('Canvas toBlob returned null'));
-              }
+              if (!blob) return reject(new Error('Canvas toBlob returned null'));
               const url = URL.createObjectURL(blob);
               onProgress(100);
               resolve({ url, size: blob.size });
             },
             mimeType,
-            quality // Quality setting for JPEG/WEBP
+            quality
           );
-        };
-        img.onerror = () => reject(new Error('Image could not be loaded'));
-        if (e.target?.result) {
-          img.src = e.target.result as string;
-        } else {
-          reject(new Error('FileReader result is null'));
-        }
       };
 
-      reader.onerror = () => reject(new Error('FileReader failed'));
-      reader.readAsDataURL(blobToProcess);
+      const fileName = file.name.toLowerCase();
+      const fileType = file.type.toLowerCase();
+
+      // CORREZIONE 1: Gestione robusta dei file TIFF.
+      // Il file viene decodificato su un canvas e questo canvas viene passato direttamente
+      // alla funzione di processamento, evitando il fragile passaggio intermedio di creare un blob PNG.
+      if (fileName.endsWith('.tiff') || fileName.endsWith('.tif') || fileType.includes('tiff')) {
+        onProgress(10);
+        const arrayBuffer = await file.arrayBuffer();
+        const ifds = UTIF.decode(arrayBuffer);
+        if (!ifds || ifds.length === 0) return reject(new Error('Invalid TIFF file'));
+        const firstPage = ifds[0];
+        UTIF.decodeImage(arrayBuffer, firstPage);
+        const rgba = UTIF.toRGBA8(firstPage);
+
+        const decodedCanvas = document.createElement('canvas');
+        decodedCanvas.width = firstPage.width;
+        decodedCanvas.height = firstPage.height;
+        const ctx = decodedCanvas.getContext('2d');
+        if (!ctx) return reject(new Error('Could not get canvas context for TIFF decoding'));
+        
+        const imageData = new ImageData(new Uint8ClampedArray(rgba), firstPage.width, firstPage.height);
+        ctx.putImageData(imageData, 0, 0);
+        onProgress(25);
+        processSource(decodedCanvas);
+      } else {
+        // Gestione di tutti gli altri tipi di immagine (incluso HEIC dopo la pre-conversione)
+        let blobToProcess: Blob = file;
+        if (fileName.endsWith('.heic') || fileName.endsWith('.heif') || fileType.includes('heic') || fileType.includes('heif')) {
+          onProgress(10);
+          const convertedBlob = await heic2any({ blob: file, toType: "image/png" });
+          blobToProcess = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+          onProgress(20);
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          onProgress(25);
+          const img = new Image();
+          img.onload = () => processSource(img);
+          img.onerror = () => reject(new Error('Image could not be loaded'));
+          if (e.target?.result) {
+            img.src = e.target.result as string;
+          } else {
+            reject(new Error('FileReader result is null'));
+          }
+        };
+        reader.onerror = () => reject(new Error('FileReader failed'));
+        reader.readAsDataURL(blobToProcess);
+      }
     } catch (err) {
       console.error('Conversion failed:', err);
       reject(err);

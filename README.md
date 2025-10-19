@@ -54,4 +54,4 @@ A dedicated section provides granular control over the output:
 - **Archiving:** `jszip`
 
 ---
-&copy; 2025 Chiara Berti 13
+&copy; 2024 Chiara Berti 13

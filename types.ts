@@ -5,7 +5,7 @@ export enum FileStatus {
   ERROR = 'Error'
 }
 
-export type SupportedFormat = 'JPG' | 'PNG' | 'WEBP' | 'BMP' | 'TIFF';
+export type SupportedFormat = 'JPG' | 'PNG' | 'WEBP' | 'BMP' | 'TIFF' | 'HEIC' | 'HEIF';
 
 export interface ResizeOptions {
   enabled: boolean;
